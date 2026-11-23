@@ -2,7 +2,7 @@
   "name": "vd-infotech-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "Blog API for the VD Infotech website",
+  "description": "Blog and packages API for the VD Infotech website",
   "type": "module",
   "main": "src/server.js",
   "engines": {
@@ -12,7 +12,9 @@
     "dev": "node --watch --env-file-if-exists=.env src/server.js",
     "start": "node --env-file-if-exists=.env src/server.js",
     "seed": "node --env-file-if-exists=.env src/seed/seed.js",
-    "seed:fresh": "node --env-file-if-exists=.env src/seed/seed.js --fresh"
+    "seed:fresh": "node --env-file-if-exists=.env src/seed/seed.js --fresh",
+    "seed:packages": "node --env-file-if-exists=.env src/seed/seedPackages.js",
+    "seed:packages:fresh": "node --env-file-if-exists=.env src/seed/seedPackages.js --fresh"
   },
   "dependencies": {
     "cors": "^2.8.6",

@@ -11,4 +11,17 @@ export const env = {
   revalidateUrl: process.env.FRONTEND_REVALIDATE_URL || "",
   revalidateSecret: process.env.REVALIDATE_SECRET || "",
   isProduction: process.env.NODE_ENV === "production",
+
+  // Razorpay (Dashboard → Account & Settings → API Keys / Webhooks).
+  razorpay: {
+    keyId: process.env.RAZORPAY_KEY_ID || "",
+    keySecret: process.env.RAZORPAY_KEY_SECRET || "",
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
+    // Only for automated tests against a stand-in server; never set in production.
+    apiBase: (process.env.RAZORPAY_API_BASE || "https://api.razorpay.com/v1").replace(/\/+$/, ""),
+  },
+  // How long an auto-renewing subscription runs before it completes, in
+  // months (Razorpay needs a fixed number of cycles). 60 = 5 years: 60
+  // monthly, 20 quarterly, 10 bi-annual or 5 annual charges.
+  subscriptionTermMonths: Number(process.env.SUBSCRIPTION_TERM_MONTHS) || 60,
 };
