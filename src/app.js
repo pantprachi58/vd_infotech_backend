@@ -5,6 +5,7 @@ import morgan from "morgan";
 import mongoose from "mongoose";
 import { env } from "./config/env.js";
 import blogRoutes from "./routes/blogRoutes.js";
+import consultationRoutes from "./routes/consultationRoutes.js";
 import { UPLOAD_DIR, UPLOAD_URL } from "./controllers/uploadController.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
@@ -33,6 +34,7 @@ export function createApp() {
   );
 
   app.use("/api/blog", blogRoutes);
+  app.use("/api/consultation", consultationRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
