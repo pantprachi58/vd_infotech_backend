@@ -9,6 +9,9 @@ import packageRoutes from "./routes/packageRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import { razorpayWebhook } from "./controllers/paymentController.js";
+import formRoutes, { formBodyParser } from "./routes/formRoutes.js";
+import { submitForm } from "./controllers/formController.js";
+import { FORM_FILE_PATTERN, FORM_UPLOAD_DIR, FORM_UPLOAD_URL, formFileHeaders } from "./utils/formUploads.js";
 import { UPLOAD_DIR, UPLOAD_URL } from "./controllers/uploadController.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
@@ -21,6 +24,9 @@ export function createApp() {
   // Razorpay signs the exact bytes it sends, so its webhook reads the raw
   // body and must be registered before the JSON parser.
   app.post("/api/payments/razorpay/webhook", express.raw({ type: "*/*", limit: "1mb" }), razorpayWebhook);
+  // Form submissions may carry a small attachment, so they get a larger body
+  // limit; parsed here first, the global parser below then leaves them alone.
+  app.use("/api/forms", formBodyParser);
   app.use(express.json({ limit: "2mb" }));
   if (!env.isProduction) app.use(morgan("dev"));
 
@@ -39,10 +45,27 @@ export function createApp() {
     express.static(UPLOAD_DIR, { maxAge: "30d", immutable: true, fallthrough: false })
   );
 
+  // Files attached to website forms, linked from the team emails. Only names
+  // in the generated pattern are served; there is no index.
+  app.use(
+    FORM_UPLOAD_URL,
+    (req, res, next) => {
+      if (!FORM_FILE_PATTERN.test(req.path.slice(1))) return res.status(404).json({ error: "File not found" });
+      next();
+    },
+    express.static(FORM_UPLOAD_DIR, { index: false, dotfiles: "deny", fallthrough: false, setHeaders: formFileHeaders })
+  );
+
   app.use("/api/blog", blogRoutes);
   app.use("/api/packages", packageRoutes);
   app.use("/api/checkout", checkoutRoutes);
   app.use("/api/payments", paymentRoutes);
+  app.use("/api/forms", formRoutes);
+  // Older clients posted the strategy-session form here; same handler.
+  app.post("/api/consultation", (req, res) => {
+    req.params.form = "consultation";
+    return submitForm(req, res);
+  });
 
   app.use(notFoundHandler);
   app.use(errorHandler);
