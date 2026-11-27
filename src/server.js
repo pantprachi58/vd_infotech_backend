@@ -1,9 +1,11 @@
 import { createApp } from "./app.js";
 import { connectDb, disconnectDb } from "./config/db.js";
 import { env } from "./config/env.js";
+import { logMailboxStatus } from "./utils/mailer.js";
 
 async function start() {
   await connectDb();
+  logMailboxStatus();
   if (!env.adminApiKey) console.warn("ADMIN_API_KEY is not set — write routes will refuse every request.");
 
   const server = createApp().listen(env.port, () => {

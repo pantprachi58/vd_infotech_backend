@@ -1,57 +1,77 @@
 import nodemailer from "nodemailer";
+import { getMailbox, mailboxStatus, smtpServer } from "../config/mailboxes.js";
 import { HttpError } from "./httpError.js";
 
-/* SMTP mail (Hostinger). Settings come from SMTP_* in .env. */
-let smtpTransporter = null;
+/* SMTP mail (Hostinger), one transporter per mailbox, created on first use. */
+const transporters = new Map();
 
-export const isSmtpConfigured = () =>
-  Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS);
-
-const getEmailFrom = () => process.env.SMTP_FROM || process.env.SMTP_USER;
-
-export const getSmtpTransporter = (transportOptions = {}) => {
-  if (!isSmtpConfigured()) {
-    throw new HttpError(500, "SMTP email is not configured");
-  }
-
-  if (!smtpTransporter) {
-    smtpTransporter = nodemailer.createTransport({
+function transporterFor(box) {
+  let transporter = transporters.get(box.id);
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      ...smtpServer(),
+      auth: { user: box.user, pass: box.pass },
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
-      socketTimeout: 15_000,
-      ...transportOptions,
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: process.env.SMTP_SECURE === "true",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
+      socketTimeout: 20_000,
     });
+    transporters.set(box.id, transporter);
   }
+  return transporter;
+}
 
-  return smtpTransporter;
-};
+/**
+ * Sends one message from `mailboxId` ("lead", "consult", "form", "career").
+ * `to` defaults to the mailbox's own inbox (<PREFIX>_MAIL_TO, else its login).
+ * Outside production an unconfigured mailbox only logs, so forms can be
+ * exercised locally without SMTP credentials.
+ */
+export async function sendMail(mailboxId, { to, subject, text, html, replyTo, attachments }) {
+  const box = getMailbox(mailboxId);
+  const recipients = to ?? box.to;
 
-export const verifySmtpConnection = () => getSmtpTransporter().verify();
-
-export const sendMail = async ({ to, subject, text, html, replyTo }) => {
-  if (!isSmtpConfigured()) {
+  if (!box.configured) {
     if (process.env.NODE_ENV === "production") {
-      throw new HttpError(500, "SMTP email is not configured");
+      throw new HttpError(500, `The ${box.label} mailbox is not configured (${box.prefix}_SMTP_USER / ${box.prefix}_SMTP_PASS)`);
     }
-    console.warn(`[mail:dev] SMTP not configured — would send "${subject}" to ${to}`);
-    return { provider: "dev", to };
+    console.warn(`[mail:dev] ${box.prefix} mailbox not configured — would send "${subject}" to ${[recipients].flat().join(", ")}`);
+    return { provider: "dev", to: recipients };
   }
 
-  const info = await getSmtpTransporter().sendMail({
-    from: getEmailFrom(),
-    to,
+  const info = await transporterFor(box).sendMail({
+    from: box.from,
+    to: recipients,
     replyTo,
     subject,
     text,
     html,
+    attachments,
   });
+  return { provider: "smtp", to: recipients, messageId: info.messageId };
+}
 
-  return { provider: "smtp", to, messageId: info.messageId };
-};
+/** Logs which mailboxes are ready at startup. */
+export function logMailboxStatus() {
+  for (const { id, configured, user, to } of mailboxStatus()) {
+    if (configured) console.log(`Mail: ${id.padEnd(7)} → sends as ${user}, delivers to ${to.join(", ")}`);
+    else console.warn(`Mail: ${id.padEnd(7)} → not configured`);
+  }
+}
+
+/** Checks the SMTP login of every configured mailbox. */
+export async function verifyMailboxes() {
+  const results = {};
+  for (const { id, configured } of mailboxStatus()) {
+    if (!configured) {
+      results[id] = "not configured";
+      continue;
+    }
+    try {
+      await transporterFor(getMailbox(id)).verify();
+      results[id] = "ok";
+    } catch (err) {
+      results[id] = err.message;
+    }
+  }
+  return results;
+}
